@@ -1,0 +1,6 @@
+#Python
+env/*
+*.py*
+
+#PyCharm
+.idea/*
