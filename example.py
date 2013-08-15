@@ -19,8 +19,17 @@ def insert_driver_wrapper(f, driver):
     @wraps(f)
     def wrapper(*args, **kwargs):
         args[0].driver = driver
-        f(*args, **kwargs)
-        del args[0].driver
+        try:
+            f(*args, **kwargs)
+        except Exception as e:
+            if len(e.args) is 1:
+                e.args = (': '.join((driver.name, e.args[0])),)
+            else:
+                e.args += (driver.name, )
+            raise
+        finally:
+            args[0].driver.close()
+            del args[0].driver
 
     return wrapper
 
@@ -41,11 +50,7 @@ class ExampleTestCase(unittest.TestCase):
 
     __metaclass__ = MetaTestCase
 
-    def tearDown(self):
-        for driver in self.drivers:
-            driver.close()
-
     def test_google(self):
         self.driver.get('http://google.com')
         if self.driver.name == 'firefox':
-            raise Exception('Firefox failed.')
+            raise Exception('Test failed.')
