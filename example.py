@@ -5,23 +5,34 @@ from functools import wraps
 
 from selenium import webdriver
 
+drivers = (
+    lambda: webdriver.Firefox(),
+    lambda: webdriver.Chrome(
+        executable_path=os.path.join(
+            os.path.split(__file__)[0], 'chromedriver'
+        )
+    ),
+)
 
-def gotchya(f):
+
+def insert_driver_wrapper(f, driver):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        self = args[0]
-        for d in self.drivers:
-            self.driver = d
-            f(*args, **kwargs)
+        args[0].driver = driver
+        f(*args, **kwargs)
+        del args[0].driver
 
     return wrapper
 
 
 class MetaTestCase(type):
     def __new__(mcs, name, bases, dct):
-        tests =  [f for f in dct if re.match('^test_', f)]
+        dct['drivers'] = (x() for x in drivers)
+        tests = [f for f in dct if re.match('^test_', f)]
         for test in tests:
-            dct[test] = gotchya(dct[test])
+            for driver in dct['drivers']:
+                dct['_'.join([test, driver.name])] = insert_driver_wrapper(dct[test], driver)
+            del dct[test]
 
         return type.__new__(mcs, name, bases, dct)
 
@@ -30,20 +41,11 @@ class ExampleTestCase(unittest.TestCase):
 
     __metaclass__ = MetaTestCase
 
-    def setUp(self):
-        self.drivers = (
-            webdriver.Firefox(),
-            webdriver.Chrome(
-                executable_path=os.path.join(
-                    os.path.split(__file__)[0], 'chromedriver'
-                )
-            ),
-        )
-
     def tearDown(self):
         for driver in self.drivers:
             driver.close()
 
     def test_google(self):
         self.driver.get('http://google.com')
-        import time; time.sleep(1)
+        if self.driver.name == 'firefox':
+            raise Exception('Firefox failed.')
